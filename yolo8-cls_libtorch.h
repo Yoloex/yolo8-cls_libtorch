@@ -7,4 +7,3 @@
 #include <torch/torch.h>
 #include <torch/script.h>
 #include <torch/csrc/autograd/generated/variable_factories.h>
-#include <fpng.h>
