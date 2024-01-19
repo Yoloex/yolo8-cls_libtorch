@@ -5,16 +5,17 @@
 
 using namespace std;
 using namespace torch;
+using namespace lodepng;
 
 typedef unsigned int uint;
-const TensorOptions options = TensorOptions().dtype(kByte);
+typedef unsigned char uchar;
 
-at::Tensor ToTensor(uint8_t*img, int width, int height, int channels)
+at::Tensor ToTensor(uchar *img, int width, int height, int channels)
 {
 	at::Tensor tensor_image;
 
 	try {
-		tensor_image = torch::from_blob(img, { height, width, channels }, options);
+		tensor_image = torch::from_blob(img, { height, width, channels }, torch::kByte);
 	}
 	catch (const c10::Error e) {
 		cerr << e.what() << endl;
@@ -26,6 +27,7 @@ at::Tensor ToTensor(uint8_t*img, int width, int height, int channels)
 int main(int argc, char* argv[])
 {
 	string model_path = argv[1], img_path = argv[2];
+
 	jit::script::Module module;
 
 	try {
@@ -37,33 +39,35 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	std::vector<uint8_t> out;
+	vector<uchar> out;
 	uint width;
 	uint height;
-	uint channels_in_file;
 	uint desired_channels = 3;
 
-	int ret = fpng::fpng_decode_file(img_path.c_str(), out, width, height, channels_in_file, desired_channels);
-
-	if (!ret) {
+	uint ret = decode(out, width, height, img_path.c_str());
+	
+	if (ret) {
 		cerr << "Error reading the image" << endl;
 		return -2;
 	}
-
-	uint8_t* buffer = (uint8_t*)malloc(out.size());
+	
+	uchar* buffer = (uchar*)malloc(out.size());
 	memcpy(buffer, out.data(), out.size());
+
 	at::Tensor input = ToTensor(buffer, width, height, desired_channels);
-	input = input.permute({ 2, 0, 1 }).unsqueeze(0);
+	
+	input = input.permute({ 2, 0, 1 }).unsqueeze(0).toType(kFloat32).div_(255);
+	input.sub_(0.5).div_(0.5);
 
 	Tensor input_tensor;
 
 	try {
-		input_tensor = nn::functional::interpolate(
+		input = nn::functional::interpolate(
 			input,
 			nn::functional::InterpolateFuncOptions()
 			.mode(kBilinear)
-			.align_corners(false)
 			.size(vector<int64_t>({ 224, 224 }))
+			.align_corners(true)
 		);
 	}
 	catch (const c10::Error e) {
@@ -71,12 +75,14 @@ int main(int argc, char* argv[])
 		return -3;
 	}
 
-	input_tensor = input_tensor.toType(kFloat32).div(255);
+	input_tensor = input.mul(0.5).add(0.5).mul(255).contiguous().toType(kByte).permute({1, 2, 0});
+
+	encode("resized.png", input_tensor.data_ptr<uchar>(), 224, 224);
 
 	Tensor res;
 
 	try{
-			res = module.forward({ input_tensor }).toTensor();
+			res = module.forward({ input }).toTensor();
 	}
 	catch (const c10::Error e) {
 		cerr << e.what() << endl;

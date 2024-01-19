@@ -7,7 +7,7 @@ project ("yolo8-cls_libtorch")
 
 include_directories(${PROJECT_SOURCE_DIR})
 # Add source to this project's executable.
-add_executable (yolo8-cls_libtorch "yolo8-cls_libtorch.cpp" "yolo8-cls_libtorch.h" "fpng.cpp" "fpng.h")
+add_executable (yolo8-cls_libtorch "yolo8-cls_libtorch.cpp" "yolo8-cls_libtorch.h"   "lodepng.cpp" "lodepng.h")
 
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
