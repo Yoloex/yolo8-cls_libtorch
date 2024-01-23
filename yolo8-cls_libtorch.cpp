@@ -42,7 +42,7 @@ int main(int argc, char* argv[])
 	vector<uchar> out;
 	uint width;
 	uint height;
-	uint desired_channels = 3;
+	uint desired_channels = 4;
 
 	uint ret = decode(out, width, height, img_path.c_str());
 	
@@ -56,8 +56,7 @@ int main(int argc, char* argv[])
 
 	at::Tensor input = ToTensor(buffer, width, height, desired_channels);
 	
-	input = input.permute({ 2, 0, 1 }).unsqueeze(0).toType(kFloat32).div_(255);
-	input.sub_(0.5).div_(0.5);
+	input = input.permute({ 2, 0, 1 }).unsqueeze(0);
 
 	Tensor input_tensor;
 
@@ -75,14 +74,12 @@ int main(int argc, char* argv[])
 		return -3;
 	}
 
-	input_tensor = input.mul(0.5).add(0.5).mul(255).contiguous().toType(kByte).permute({1, 2, 0});
-
-	encode("resized.png", input_tensor.data_ptr<uchar>(), 224, 224);
+	input_tensor = input.index({ indexing::Slice(), indexing::Slice(indexing::None, 3), indexing::Slice(), indexing::Slice() });
 
 	Tensor res;
 
 	try{
-			res = module.forward({ input }).toTensor();
+			res = module.forward({ input_tensor.toType(kFloat32).div(255) }).toTensor();
 	}
 	catch (const c10::Error e) {
 		cerr << e.what() << endl;
@@ -90,7 +87,8 @@ int main(int argc, char* argv[])
 	
 	vector<float> result(res.data_ptr<float>(), res.data_ptr<float>() + res.numel());
 
-	cout << result << endl;
+	if (result[0] > result[1]) cout << "off" << endl;
+	else cout << "on" << endl;
 
 	return 0;
 }
